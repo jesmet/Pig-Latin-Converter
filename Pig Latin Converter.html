@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pig Latin Converter</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --accent: #1d9bf0;
+    --muted: #556173;
+    --radius: 12px;
+  }
+  body {
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(180deg,#eef5fb 0%, var(--bg) 100%);
+    color: #0b1a2b;
+    padding: 24px;
+  }
+
+  .card {
+    width: 760px;
+    max-width: calc(100% - 40px);
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 22px;
+    box-shadow: 0 10px 30px rgba(10,20,40,0.08);
+  }
+
+  h1 { margin:0 0 8px; font-size:20px; }
+  p.lead { margin:0 0 16px; color:var(--muted); }
+
+  .row {
+    display:flex;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .row .col {
+    flex:1;
+  }
+  textarea, input[type="text"] {
+    width:100%;
+    box-sizing:border-box;
+    padding:12px;
+    border-radius:8px;
+    border:1px solid #e6eef8;
+    font-size:16px;
+    resize:vertical;
+    min-height:48px;
+  }
+
+  .controls {
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin-bottom:12px;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding:10px 14px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button.ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid rgba(29,155,240,0.16);
+  }
+  button:active { transform: translateY(1px); }
+
+  .output {
+    background:#f7fbff;
+    border-radius:8px;
+    padding:14px;
+    min-height:64px;
+    font-size:18px;
+    line-height:1.5;
+    border:1px solid #e6f3ff;
+    color:#072033;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+
+  .small { font-size:13px; color:var(--muted); margin-top:8px; }
+  .examples { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { background:#eff7ff; color:#003a6f; padding:6px 10px; border-radius:999px; cursor:pointer; font-weight:600; border:1px solid #e0f0ff; }
+
+  footer { margin-top:12px; font-size:13px; color:var(--muted); text-align:right; }
+  @media (max-width:680px){
+    .row { flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+  <div class="card" role="region" aria-labelledby="title">
+    <h1 id="title">Pig Latin Converter</h1>
+    <p class="lead">Type a word or sentence and get the Pig Latin version. Handles punctuation and capitalization.</p>
+
+    <div class="row">
+      <div class="col">
+        <label for="inputText" class="small">Input</label>
+        <textarea id="inputText" placeholder="Type a word or sentence...">Banana</textarea>
+      </div>
+      <div style="width:200px">
+        <label class="small" for="mode">Vowel rule</label>
+        <select id="mode" style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eef8;">
+          <option value="way">Vowel → add "-way" (apple → apple-way)</option>
+          <option value="yay">Vowel → add "-yay" (apple → apple-yay)</option>
+          <option value="ay">Vowel → add "-ay" (apple → apple-ay)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="controls" role="toolbar">
+      <button id="convertBtn">Convert</button>
+      <button class="ghost" id="copyBtn">Copy</button>
+      <button class="ghost" id="clearBtn">Clear</button>
+      <div style="flex:1"></div>
+      <div class="small">Tip: Click example chips below to try quick inputs.</div>
+    </div>
+
+    <div class="output" id="output" aria-live="polite"></div>
+
+    <div class="examples">
+      <div class="chip">banana</div>
+      <div class="chip">apple</div>
+      <div class="chip">chair</div>
+      <div class="chip">Hello, world!</div>
+      <div class="chip">STRONG</div>
+    </div>
+
+    <div class="small">Rules:
+      <ul style="margin:6px 0 0 18px">
+        <li>Move leading consonant cluster to end + "-ay" (e.g., <em>banana → anana-bay</em>).</li>
+        <li>If word starts with a vowel, append the selected vowel rule (default = <strong>-way</strong>).</li>
+        <li>Punctuation is preserved; capitalization is preserved.</li>
+      </ul>
+    </div>
+
+    <footer>Made by Jesmet Sunny — Pig Latin converter</footer>
+  </div>
+
+<script>
+  const isVowel = ch => /^[aeiouAEIOU]$/.test(ch);
+
+  function splitWordParts(token) {
+    const leading = token.match(/^[^A-Za-z0-9']+/) || [''];
+    const trailing = token.match(/[^A-Za-z0-9']+$/) || [''];
+    const coreStart = leading[0].length;
+    const coreEnd = token.length - trailing[0].length;
+    const core = token.slice(coreStart, coreEnd);
+    return { leading: leading[0], core, trailing: trailing[0] };
+  }
+
+  function pigLatinCore(word, vowelRule = 'way') {
+    if (!word) return word;
+    if (!/[A-Za-z]/.test(word)) return word;
+
+    const allUpper = word === word.toUpperCase();
+    const firstUpper = /^[A-Z][a-z]/.test(word);
+
+    const lower = word.toLowerCase();
+
+    let firstVowelIdx = -1;
+    for (let i = 0; i < lower.length; i++) {
+      if (isVowel(lower[i])) { firstVowelIdx = i; break; }
+    }
+
+    let result;
+    if (firstVowelIdx === 0) {
+      if (vowelRule === 'way') result = lower + '-way';
+      else if (vowelRule === 'yay') result = lower + '-yay';
+      else result = lower + '-ay';
+    } else if (firstVowelIdx > 0) {
+      const head = lower.slice(0, firstVowelIdx);
+      const tail = lower.slice(firstVowelIdx);
+      result = tail + '-' + head + 'ay';
+    } else {
+      result = lower + '-ay';
+    }
+
+    if (allUpper) result = result.toUpperCase();
+    else if (firstUpper) result = result.charAt(0).toUpperCase() + result.slice(1);
+
+    return result;
+  }
+
+  function pigLatinText(text, vowelRule='way') {
+    const tokens = text.split(/(\s+)/); // keep spaces as tokens
+    const out = tokens.map(tok => {
+      if (/^\s+$/.test(tok)) return tok; // whitespace unchanged
+      const {leading, core, trailing} = splitWordParts(tok);
+      if (!core) return tok; // nothing to transform
+      const transformedCore = pigLatinCore(core, vowelRule);
+      return leading + transformedCore + trailing;
+    });
+    return out.join('');
+  }
+
+  const inputEl = document.getElementById('inputText');
+  const outputEl = document.getElementById('output');
+  const convertBtn = document.getElementById('convertBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const modeEl = document.getElementById('mode');
+  const chips = document.querySelectorAll('.chip');
+
+  function updateOutput() {
+    const mode = modeEl.value;
+    const text = inputEl.value;
+    const converted = pigLatinText(text, mode);
+    outputEl.textContent = converted;
+  }
+
+  convertBtn.addEventListener('click', updateOutput);
+
+  inputEl.addEventListener('input', updateOutput);
+  modeEl.addEventListener('change', updateOutput);
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(outputEl.textContent);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(()=> copyBtn.textContent = 'Copy', 1200);
+    } catch (e) {
+      copyBtn.textContent = 'Copy (failed)';
+      setTimeout(()=> copyBtn.textContent = 'Copy', 1500);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    updateOutput();
+    inputEl.focus();
+  });
+
+  chips.forEach(c => c.addEventListener('click', () => {
+    inputEl.value = c.textContent;
+    updateOutput();
+    inputEl.focus();
+  }));
+
+  updateOutput();
+</script>
+</body>
+</html>
